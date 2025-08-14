@@ -1,5 +1,6 @@
 #pragma once
 #include <wx/wx.h>
+#include <vector>
 
 
 class MainFrame : public wxFrame
@@ -8,10 +9,9 @@ public:
 	MainFrame(const wxString& title);
 private:
 	void BindObjects();
-	void CallCalculator(wxCommandEvent& event);
+	void Perform(wxCommandEvent& event, wxString label);
 
 	wxPanel* panel;
 	wxStaticText* display_screen;
-	wxButton* equals_button;
-
+	std::vector<wxButton*> calculator_buttons;
 };
