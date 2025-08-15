@@ -2,6 +2,6 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <math.h>
+#include <cmath>
 
-float Calculate(std::string expression);
+float Calculate(std::string expression, short& result_code);

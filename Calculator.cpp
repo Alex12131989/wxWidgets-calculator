@@ -8,7 +8,7 @@ struct ReturnValues
 	int position;
 };
 template <typename T>
-ReturnValues FindElement(std::vector<std::vector<T>> array, T element)
+static ReturnValues FindElement(std::vector<std::vector<T>> array, T element)
 {
 	for (int i = 0; i < array.size(); i++)
 		for (int j = 0; j < array[i].size(); j++)
@@ -18,9 +18,9 @@ ReturnValues FindElement(std::vector<std::vector<T>> array, T element)
 	return ReturnValues{ .boolean = false, .position = -1 };
 }
 
-void BreakUpExpression(std::string expression, std::vector<std::vector<int>>& operations_indeces)
+static void BreakUpExpression(std::string expression, std::vector<std::vector<int>>& operations_indeces)
 {
-	int found_at = 0;
+	size_t found_at = 0;
 	operations_indeces = { {/*+*/}, {/*-*/}, {/***/}, {/*/*/}, {/*^*/} };
 
 	while ((found_at = expression.find("+", found_at + 1)) != std::string::npos)
@@ -42,9 +42,22 @@ void BreakUpExpression(std::string expression, std::vector<std::vector<int>>& op
 	while ((found_at = expression.find("^", found_at + 1)) != std::string::npos)
 		operations_indeces[4].push_back(found_at++);
 
+	std::vector<std::vector<int>> without_minuses;
+	for (int i = 0; i < operations_indeces.size(); ++i)
+		if (i != 1)
+			without_minuses.push_back(operations_indeces[i]);
+
+	for (int i = 0; i < operations_indeces[1].size(); ++i)
+	{
+		ReturnValues values = { .boolean = false };
+		values = FindElement(without_minuses, operations_indeces[1][i] - 1);
+		if (values.boolean)
+			operations_indeces[1].erase(operations_indeces[1].begin() + i);
+	}
+
 }
 
-void UpdateExpression(std::string& expression, int starting_position, float new_value, bool completed_operation, 
+static void UpdateExpression(std::string& expression, int starting_position, float new_value, bool completed_operation, 
 	std::vector<std::vector<int>> operations_indeces)
 {
 
@@ -83,7 +96,7 @@ void UpdateExpression(std::string& expression, int starting_position, float new_
 
 }
 
-void CalculateBlock(std::string& expression, std::vector<float>& numbers, std::vector<std::vector<int>>& operations_indeces, int operation)
+static void CalculateBlock(std::string& expression, std::vector<float>& numbers, std::vector<std::vector<int>>& operations_indeces, int operation)
 {
 	int i = operations_indeces[operation][0] - 1, start = i, size;
 	ReturnValues values = { .boolean = false };
@@ -91,7 +104,7 @@ void CalculateBlock(std::string& expression, std::vector<float>& numbers, std::v
 		values = FindElement(operations_indeces, i);
 	if (i)
 		++i;
-	size = abs(i - start);
+	size = abs(start - i);
 
 	switch (operation)
 	{
@@ -112,72 +125,100 @@ void CalculateBlock(std::string& expression, std::vector<float>& numbers, std::v
 		numbers[(operations_indeces[operation][0] + 1) / (size + 1) - 1] -= numbers[(operations_indeces[operation][0] + 1) / (size + 1)];
 		break;
 	}
+
+	for (float number : numbers)
+		if (std::isinf(number))
+			throw 1;
+
 	numbers.erase(numbers.begin() + (operations_indeces[operation][0] + 1) / (size + 1));
-	UpdateExpression(expression, operations_indeces[operation][0] + 1,
-		numbers[(operations_indeces[operation][0] + 1) / (size + 1) - 1], true, operations_indeces);
+	UpdateExpression(expression, operations_indeces[operation][0] + 1, numbers[(operations_indeces[operation][0] + 1) / (size + 1) - 1], 
+		true, operations_indeces);
 	BreakUpExpression(expression, operations_indeces);
 }
 
-float Calculate(std::string expression)
+float Calculate(std::string expression, short& result_code)
 {
 	std::vector<std::vector<int>> operations_indeces = { {/*+*/}, {/*-*/}, {/***/}, {/*/*/}, {/*^*/} };
 	BreakUpExpression(expression, operations_indeces);
 	std::vector<float> numbers;
-	for (int i = 0, j = 0; i < expression.length(); ++i)
+	try
 	{
-		ReturnValues values = FindElement(operations_indeces, i);
-		if (values.boolean || i == expression.length() - 1)
+		for (int i = 0, j = 0; i < expression.length(); ++i)
 		{
-			numbers.push_back(std::stof(expression.substr(j, i)));
-			j = i + 1;
+			ReturnValues values = FindElement(operations_indeces, i);
+			if (values.boolean || i == expression.length() - 1)
+			{
+				numbers.push_back(std::stof(expression.substr(j, i)));
+				j = i + 1;
+			}
 		}
-	}
 
-	for (int i = 0; i < numbers.size(); ++i)
-	{
-		UpdateExpression(expression, i * (std::to_string(numbers[i]).length() + 1), numbers[i], false, operations_indeces);
-		BreakUpExpression(expression, operations_indeces);
-	}
-
-	while (operations_indeces[4].size() > 0)
-		CalculateBlock(expression, numbers, operations_indeces, 4);
-	
-	while (operations_indeces[2].size() + operations_indeces[3].size() > 0)
-	{
-		int i = 0, j = 0;
-		ReturnValues values = { .boolean = false };
-		for (;!values.boolean && j < expression.length(); ++j)
-			values = FindElement({ operations_indeces[2], operations_indeces[3] }, j);
-
-		switch (values.position)
+		size_t start_position = 0;
+		for (int i = 0; i < numbers.size(); ++i)
 		{
-		case 0:
-			CalculateBlock(expression, numbers, operations_indeces, 2);
-			break;
-		case 1:
-			CalculateBlock(expression, numbers, operations_indeces, 3);
-			break;
+			UpdateExpression(expression, start_position, numbers[i], false, operations_indeces);
+			BreakUpExpression(expression, operations_indeces);
+
+			ReturnValues values = { .boolean = false };
+			int j = i;
+			for (; j < expression.length() && !values.boolean; ++j)
+				values = FindElement(operations_indeces, j);
+			start_position = j;
 		}
-	}
 
-	while (operations_indeces[0].size() + operations_indeces[1].size() > 0)
-	{
-		int i = 0, j = 0;
-		ReturnValues values = { .boolean = false };
-		for (;!values.boolean && j < expression.length(); ++j)
-			values = FindElement({ operations_indeces[0], operations_indeces[1] }, j);
+		while (operations_indeces[4].size() > 0)
+			CalculateBlock(expression, numbers, operations_indeces, 4);
 
-		switch (values.position)
+		while (operations_indeces[2].size() + operations_indeces[3].size() > 0)
 		{
-		case 0:
-			CalculateBlock(expression, numbers, operations_indeces, 0);
-			break;
-		case 1:
-			CalculateBlock(expression, numbers, operations_indeces, 1);
-			break;
-		}
-	}
+			int i = 0, j = 0;
+			ReturnValues values = { .boolean = false };
+			for (;!values.boolean && j < expression.length(); ++j)
+				values = FindElement({ operations_indeces[2], operations_indeces[3] }, j);
 
-	float result = numbers[0];
-	return result;
+			switch (values.position)
+			{
+			case 0:
+				CalculateBlock(expression, numbers, operations_indeces, 2);
+				break;
+			case 1:
+				CalculateBlock(expression, numbers, operations_indeces, 3);
+				break;
+			}
+		}
+
+		while (operations_indeces[0].size() + operations_indeces[1].size() > 0)
+		{
+			int i = 0, j = 0;
+			ReturnValues values = { .boolean = false };
+			for (;!values.boolean && j < expression.length(); ++j)
+				values = FindElement({ operations_indeces[0], operations_indeces[1] }, j);
+
+			switch (values.position)
+			{
+			case 0:
+				CalculateBlock(expression, numbers, operations_indeces, 0);
+				break;
+			case 1:
+				CalculateBlock(expression, numbers, operations_indeces, 1);
+				break;
+			}
+		}
+
+		float result = numbers[0];
+		result_code = 0;
+		return result;
+	}
+	catch (int code)
+	{
+		//infinity
+		if (code == 1)
+			result_code = 2;
+	}
+	catch (...)
+	{
+		//rough syntax error
+		result_code = 1;
+	}
+	return 0;
 }

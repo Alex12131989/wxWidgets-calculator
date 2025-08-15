@@ -74,12 +74,29 @@ void MainFrame::BindObjects()
 void MainFrame::Perform(wxCommandEvent& event, wxString label)
 {
 	std::string previous_text = display_screen->GetLabel().ToStdString(), appendage;
-	if (label == "=")
+	short code = 0;
+
+	if (label == "=" && previous_text != "")
 	{
-		wxString expression = display_screen->GetLabel();
-		float result = Calculate(expression.ToStdString());
+		wxString expression = previous_text;
+		float result = Calculate(expression.ToStdString(), code);
 		previous_text = "";
-		appendage = std::to_string(result);
+		if (!code)
+		{
+			appendage = std::to_string(result);
+			size_t decimal_position = appendage.find(".");
+
+			for (size_t i = appendage.length() - 1; i >= decimal_position; --i)
+				if (appendage[i] == '0' || appendage[i] == '.')
+					appendage.resize(i);
+				else
+					i = decimal_position;
+		}
+		else if (code == 1)
+			appendage = "Couldn't evaluate the expression";
+		else if (code == 2)
+			appendage = "INFINITY-TY-TY-TY&%^$%&";
+
 	}
 	else if (label == "CA")
 	{
@@ -96,12 +113,23 @@ void MainFrame::Perform(wxCommandEvent& event, wxString label)
 		{
 			if (label == "÷" || label == "×" || label == "+" || label == "^")
 			{
-				if (previous_text[previous_text.size() - 1] != '÷' && previous_text[previous_text.size() - 1] != '×' && previous_text[previous_text.size() - 1] != '+' && 
-					previous_text[previous_text.size() - 1] != '-' && previous_text[previous_text.size() - 1] != '^')
-					appendage = label;
+				//if already changed sign, e.g. +-, don't allow to change minus
+				if (previous_text.size() > 1)
+					if (previous_text[previous_text.size() - 2] == '÷' || previous_text[previous_text.size() - 2] == '×' || 
+						previous_text[previous_text.size() - 2] == '+' || previous_text[previous_text.size() - 2] == '^')
+						label = "";
+
+				//remove previous sign add append new one at the end
+				if (previous_text[previous_text.size() - 1] == '÷' || previous_text[previous_text.size() - 1] == '×' || previous_text[previous_text.size() - 1] == '+' ||
+					previous_text[previous_text.size() - 1] == '-' || previous_text[previous_text.size() - 1] == '^')
+					if (previous_text.size() != 1)
+						previous_text.resize(previous_text.size() - 1);
+					else
+						label = "";
 			}
-			else
-				appendage = label;
+			else if (label == "-" && previous_text[previous_text.size() - 1] == '-') 
+				label = "";
+			appendage = label;
 		}
 		else 
 			if (label != "÷" && label != "×" && label != "+" && label != "^")
